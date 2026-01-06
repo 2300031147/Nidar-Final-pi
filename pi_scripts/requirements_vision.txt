@@ -1,0 +1,9 @@
+# Vision and Detection Dependencies for Scout Drone
+opencv-python-headless>=4.5.0
+numpy>=1.19.0
+
+# For Raspberry Pi Camera (optional, comment out if using USB camera)
+# picamera2
+
+# For video streaming
+flask>=2.0.0
