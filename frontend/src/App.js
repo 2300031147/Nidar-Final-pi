@@ -403,7 +403,10 @@ function App() {
 
             <aside className="w-80 flex-shrink-0 border-r border-slate-200 bg-white flex flex-col z-10">
                 <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-                    <h1 className="text-lg font-bold text-slate-900 tracking-tight">SkyLink<span className="text-blue-500">.NIDAR</span></h1>
+                    <div className="flex items-center gap-3">
+                        <img src="/fossil_logo.png" alt="Fossil Logo" className="h-10 w-10 object-contain bg-slate-900 rounded-lg p-1" />
+                        <h1 className="text-lg font-bold text-slate-900 tracking-tight">Fossil</h1>
+                    </div>
                     <div className="flex gap-2">
                         <button
                             onClick={() => setViewMode('map')}
@@ -747,7 +750,11 @@ function App() {
                 viewMode === 'map' ? (
                     <main className="flex-1 relative">
                         <MapContainer center={[16.5062, 80.6480]} zoom={16} zoomControl={false} style={{ height: "100%", width: "100%" }}>
-                            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                            <TileLayer
+                                url="http://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"
+                                subdomains={['mt0', 'mt1', 'mt2', 'mt3']}
+                                attribution='&copy; Google Maps'
+                            />
                             <MapClicker addWaypoint={handleMapClick} mode={drawMode} />
 
                             <DroneTracker position={activeData} followMode={followMode} />
