@@ -523,7 +523,9 @@ def detect_humans(frame):
         # Run Inference
         # classes=[0] enforces only 'person' class detection
         # conf=0.4 is a good balance for humans
-        results = HOG_DETECTOR(frame, classes=[0], conf=0.4, verbose=False)
+        # imgsz=416: Optimization for Pi 4 (Balance of Speed vs 20ft Detection Range)
+        # half=False: Pi 4 CPU does not support FP16 math well
+        results = HOG_DETECTOR(frame, classes=[0], conf=0.4, imgsz=416, half=False, verbose=False)
         
         detections = []
         for r in results:
