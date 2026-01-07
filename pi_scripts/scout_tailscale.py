@@ -12,6 +12,7 @@ from flask import Flask, Response
 from ultralytics import YOLO # pip install ultralytics
 # 🔴 CONFIGURATION - YOUR TAILSCALE IP
 BROKER_IP = "100.125.45.22"
+BROKER_SECONDARY_IP = "100.102.90.88" # Backup/Secondary Laptop
 
 TOPIC_MISSION = "nidar/scout/mission"
 TOPIC_TELEM = "nidar/scout/telemetry"
@@ -383,32 +384,40 @@ def on_message(client, userdata, msg):
 
     except Exception as e:
         print(f"❌ MQTT Message Error: {e}")
-        import traceback
-        traceback.print_exc()
+        # import traceback
+        # traceback.print_exc()
 
-client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+client1 = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="scout_primary")
+client2 = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="scout_secondary")
 
-def on_connect(client, userdata, flags, rc, properties=None):
-    if rc == 0:
-        print("✅ Connected to GCS MQTT Broker")
-        client.subscribe(TOPIC_MISSION)
-        print(f"📡 Subscribed to {TOPIC_MISSION}")
-    else:
-        print(f"❌ Connection Failed: Code {rc}")
+def on_connect_factory(name):
+    def on_connect(client, userdata, flags, rc, properties=None):
+        if rc == 0:
+            print(f"✅ Connected to {name} MQTT Broker")
+            client.subscribe(TOPIC_MISSION)
+            print(f"📡 Subscribed to {TOPIC_MISSION} on {name}")
+        else:
+            print(f"❌ Connection to {name} Failed: Code {rc}")
+    return on_connect
 
-client.on_connect = on_connect
-client.on_message = on_message
+client1.on_connect = on_connect_factory("Primary")
+client1.on_message = on_message
+client2.on_connect = on_connect_factory("Secondary")
+client2.on_message = on_message
 
-while True:
-    try:
-        client.connect(BROKER_IP, 1883, 60)
-        break
-    except Exception as e:
-        print(f"⚠️ MQTT Connection Failed: {e}")
-        print("   Retrying in 5 seconds...")
-        time.sleep(5)
+def mqtt_loop_thread(client, ip, name):
+    print(f"⏳ Connecting to {name} Broker ({ip})...")
+    while True:
+        try:
+            client.connect(ip, 1883, 60)
+            client.loop_forever() # Use loop_forever for dedicated threads
+        except Exception as e:
+            print(f"⚠️ {name} MQTT Connection Failed: {e}")
+            time.sleep(5)
 
-client.loop_start()
+# Start MQTT threads
+threading.Thread(target=mqtt_loop_thread, args=(client1, BROKER_IP, "Primary"), daemon=True).start()
+threading.Thread(target=mqtt_loop_thread, args=(client2, BROKER_SECONDARY_IP, "Secondary"), daemon=True).start()
 
 # --- HUMAN DETECTION FUNCTIONS ---
 def init_camera():
@@ -565,8 +574,9 @@ def publish_detection(lat, lon):
     }
     
     try:
-        client.publish(TOPIC_DETECTIONS, json.dumps(detection_data))
-        print(f"🚨 HUMAN DETECTED at ({lat:.6f}, {lon:.6f}) - Published to MQTT")
+        client1.publish(TOPIC_DETECTIONS, json.dumps(detection_data))
+        client2.publish(TOPIC_DETECTIONS, json.dumps(detection_data))
+        print(f"🚨 HUMAN DETECTED at ({lat:.6f}, {lon:.6f}) - Published to MQTT (Both Brokers)")
     except Exception as e:
         print(f"❌ Failed to publish detection: {e}")
 
@@ -894,8 +904,14 @@ try:
 
         # Periodic Telemetry Publish
         if time.time() - last_telem_send > 0.5:
-            client.publish(TOPIC_TELEM, json.dumps(DRONE_DATA))
-            # print(f"📡 Telem: {DRONE_DATA['status']} Alt:{DRONE_DATA['alt']}")
+            # Publish to BOTH
+            try:
+                payload = json.dumps(DRONE_DATA)
+                client1.publish(TOPIC_TELEM, payload)
+                client2.publish(TOPIC_TELEM, payload)
+            except Exception as e:
+                pass # Ignore publish errors generally
+
             if int(time.time()) % 2 == 0: 
                 print(f"\r📡 Sats:{DRONE_DATA.get('gps_sats',0)} Fix:{DRONE_DATA.get('gps_fix',0)} Bat:{DRONE_DATA.get('bat',0)}% Mode:{DRONE_DATA.get('mode')}", end="", flush=True)
             last_telem_send = time.time()
