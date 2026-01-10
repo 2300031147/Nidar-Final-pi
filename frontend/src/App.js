@@ -145,11 +145,11 @@ function App() {
     const [drawMode, setDrawMode] = useState('mission'); // 'mission' or 'area'
 
     const [scout, setScout] = useState({
-        lat: 16.506, lon: 80.648, alt: 0, bat: 0, bat_voltage: 0, bat_current: 0, bat_time_min: 0, gps_sats: 0,
+        lat: 16.506, lon: 80.648, alt: 0, bat: 0, bat_voltage: 0, bat_current: 0, bat_time_min: 0, req_rtl_batt: 0, gps_sats: 0,
         status: "DISARMED", speed: 0, mode: "UNKNOWN"
     });
     const [delivery, setDelivery] = useState({
-        lat: 16.506, lon: 80.648, alt: 0, bat: 0, bat_voltage: 0, bat_current: 0, bat_time_min: 0, gps_sats: 0,
+        lat: 16.506, lon: 80.648, alt: 0, bat: 0, bat_voltage: 0, bat_current: 0, bat_time_min: 0, req_rtl_batt: 0, gps_sats: 0,
         status: "DISARMED", speed: 0, mode: "UNKNOWN"
     });
     const [survivor, setSurvivor] = useState(null);
@@ -447,6 +447,13 @@ function App() {
                                     <div>Speed: <span className="text-slate-900 font-medium">{scout.speed}m/s</span></div>
                                     <div>Battery: <span className="text-slate-900 font-medium">{scout.bat}%</span></div>
                                     <div>Voltage: <span className="text-slate-900 font-medium">{scout.bat_voltage ? scout.bat_voltage.toFixed(1) + 'V' : '---'}</span></div>
+                                    <div>Signal: <span className="text-slate-900 font-medium">{scout.gps_sats >= 6 ? 'Good' : 'Weak'}</span></div>
+                                    <div className="col-span-2 mt-1 pt-1 border-t border-slate-100 flex justify-between items-center">
+                                        <span className="text-[10px] font-bold text-slate-400">RTL REQ:</span>
+                                        <span className={`font-mono font-bold ${scout.bat < scout.req_rtl_batt ? 'text-red-500 animate-pulse' : 'text-slate-700'}`}>
+                                            {scout.req_rtl_batt}%
+                                        </span>
+                                    </div>
                                     <div className="col-span-2">🛰️ GPS: <span className={`font-semibold ${scout.gps_sats >= 10 ? 'text-green-600' : scout.gps_sats >= 6 ? 'text-yellow-600' : 'text-red-600'}`}>{scout.gps_sats} sats</span></div>
                                 </div>
                                 {scout.bat_time_min > 0 && (
@@ -478,6 +485,13 @@ function App() {
                                     <div>Speed: <span className="text-slate-900 font-medium">{delivery.speed}m/s</span></div>
                                     <div>Battery: <span className="text-slate-900 font-medium">{delivery.bat}%</span></div>
                                     <div>Voltage: <span className="text-slate-900 font-medium">{delivery.bat_voltage ? delivery.bat_voltage.toFixed(1) + 'V' : '---'}</span></div>
+                                    <div>Voltage: <span className="text-slate-900 font-medium">{delivery.bat_voltage ? delivery.bat_voltage.toFixed(1) + 'V' : '---'}</span></div>
+                                    <div className="col-span-2 mt-1 pt-1 border-t border-slate-100 flex justify-between items-center">
+                                        <span className="text-[10px] font-bold text-slate-400">RTL REQ:</span>
+                                        <span className={`font-mono font-bold ${delivery.bat < delivery.req_rtl_batt ? 'text-red-500 animate-pulse' : 'text-slate-700'}`}>
+                                            {delivery.req_rtl_batt}%
+                                        </span>
+                                    </div>
                                     <div className="col-span-2">🛰️ GPS: <span className={`font-semibold ${delivery.gps_sats >= 10 ? 'text-green-600' : delivery.gps_sats >= 6 ? 'text-yellow-600' : 'text-red-600'}`}>{delivery.gps_sats} sats</span></div>
                                 </div>
                                 {delivery.bat_time_min > 0 && (

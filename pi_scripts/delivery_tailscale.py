@@ -17,7 +17,12 @@ DROP_SERVO_CHANNEL = 9  # AUX1 = Channel 9 (adjust as needed)
 DROP_SERVO_PWM_OPEN = 1900  # PWM value to release package
 DROP_SERVO_PWM_CLOSE = 1100  # PWM value to hold package
 DROP_ALTITUDE = 3  # Altitude in meters to drop package
+DROP_ALTITUDE = 3  # Altitude in meters to drop package
 DROP_DISTANCE_THRESHOLD = 1.0  # Horizontal distance in meters to trigger drop
+
+# FAILSAFE CONFIGURATION
+RTL_SPEED_MPS = 8.0     # Assumed average speed during RTL
+FAILSAFE_AMPS = 26.0    # Conservative current draw estimate
 
 COPTER_MODES = {
     0: 'STABILIZE', 3: 'AUTO', 4: 'GUIDED', 5: 'LOITER', 6: 'RTL', 9: 'LAND'
@@ -53,8 +58,11 @@ DRONE_DATA = {
     "bat_voltage": 0,   # Voltage in volts
     "bat_current": 0,   # Current draw in amps  
     "bat_time_min": 0,  # Estimated minutes remaining
+    "bat_time_min": 0,  # Estimated minutes remaining
+    "req_rtl_batt": 0,  # REQUIRED battery % for RTL
     "gps_sats": 0,      # Number of GPS satellites
-    "status": "DISARMED", "speed": 0, "mode": "UNKNOWN"
+    "status": "DISARMED", "speed": 0, "mode": "UNKNOWN",
+    "home_lat": 0, "home_lon": 0 # Home location (Set on Arm)
 }
 BATTERY_CAPACITY_MAH = 5000  # Default battery capacity, adjust for your battery
 LAST_HEARTBEAT = 0  # FIXED: Was missing
@@ -97,6 +105,40 @@ def send_disarm(force=True):
         drone.target_system, drone.target_component,
         mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
         0, 0, magic_override, 0, 0, 0, 0, 0)
+
+def calculate_smart_rtl():
+    """Calculate required battery % for RTL based on distance and power profile."""
+    # 1. Check if we have a valid Home Location
+    home_lat = DRONE_DATA.get('home_lat', 0)
+    home_lon = DRONE_DATA.get('home_lon', 0)
+    curr_lat = DRONE_DATA.get('lat', 0)
+    curr_lon = DRONE_DATA.get('lon', 0)
+    
+    if home_lat == 0 or curr_lat == 0:
+        DRONE_DATA['req_rtl_batt'] = 0
+        return
+
+    # 2. Calculate Distance to Home
+    dist_home = calculate_distance(curr_lat, curr_lon, home_lat, home_lon)
+    
+    # 3. Calculate Time to Return (in hours)
+    # Time = Distance / Speed
+    time_hours = dist_home / (RTL_SPEED_MPS * 3600.0) # Convert seconds to hours
+    
+    # 4. Calculate Capacity Consumed (Ah)
+    # Capacity = Current (Amps) * Time (Hours)
+    capacity_consumed_ah = FAILSAFE_AMPS * time_hours
+    
+    # 5. Convert to Percentage of Total Capacity
+    # We use BATTERY_CAPACITY_MAH (which is in mAh, so divide by 1000 for Ah)
+    total_capacity_ah = BATTERY_CAPACITY_MAH / 1000.0
+    req_pct = (capacity_consumed_ah / total_capacity_ah) * 100.0
+    
+    # 6. Add Safety Margin (e.g., +5%)
+    req_pct += 5.0
+    
+    DRONE_DATA['req_rtl_batt'] = round(req_pct, 1)
+    # print(f"🔋 SMART RTL: Dist={dist_home:.1f}m, Req={req_pct:.1f}%")
 
 # Global flag for Indoor Mode
 INDOOR_MODE = False
@@ -526,7 +568,15 @@ def on_message(client, userdata, msg):
         data = json.loads(msg.payload.decode())
         if 'type' in data and data['type'] == "COMMAND":
             act = data.get('act')
-            if act == "ARM": send_arm()
+        if 'type' in data and data['type'] == "COMMAND":
+            act = data.get('act')
+            if act == "ARM": 
+                # Set Home Location on Arm Command (Approximation, better to do on actual ARM event)
+                if DRONE_DATA.get('lat', 0) != 0:
+                    DRONE_DATA['home_lat'] = DRONE_DATA['lat']
+                    DRONE_DATA['home_lon'] = DRONE_DATA['lon']
+                    print(f"🏠 HOME SET: {DRONE_DATA['home_lat']}, {DRONE_DATA['home_lon']}")
+                send_arm()
             elif act == "DISARM": send_disarm()
             elif act == "LAND": 
                 drone.set_mode('LAND')
@@ -631,6 +681,9 @@ try:
                 DRONE_DATA["bat_voltage"] = msg.voltage_battery / 1000.0 if msg.voltage_battery != 65535 else 0
                 # Current draw: received in 10*milliamps, convert to amps
                 DRONE_DATA["bat_current"] = msg.current_battery / 100.0 if msg.current_battery != -1 else 0
+                
+                # Update Smart RTL Calc
+                calculate_smart_rtl()
                 
                 # Calculate estimated time remaining (minutes)
                 if DRONE_DATA["bat_current"] > 0.1:  # Only calculate if drawing meaningful current
